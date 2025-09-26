@@ -3,128 +3,151 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>NUSATASK — Admin Panel</title>
+<title>NUSATASK — Withdraw</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
 <style>
   :root{
     --bg1:#07101a;--bg2:#06111a;
-    --card:rgba(255,255,255,0.03);
-    --muted:#98a0ad;
-    --accent:#7c5cff;
-    --accent-2:#44d7b6;
+    --muted:#98a0ad;--accent:#7c5cff;--accent-2:#44d7b6;
     --danger:#ff4d6d;--success:#22c55e;
     --glass-border:rgba(255,255,255,0.06);
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:'Poppins',sans-serif;background:linear-gradient(180deg,var(--bg1),var(--bg2));color:#e8f0ff}
-  .shell{max-width:900px;margin:40px auto;padding:20px;background:rgba(255,255,255,0.02);border:1px solid var(--glass-border);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+  .shell{max-width:600px;margin:40px auto;padding:20px;background:rgba(255,255,255,0.02);border:1px solid var(--glass-border);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
   h1{margin-top:0;font-size:22px}
-  .btn{padding:6px 12px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
-  .btn.ban{background:var(--danger);color:white}
-  .btn.unban{background:var(--success);color:white}
-  .btn.update{background:var(--accent);color:white}
+  .btn{padding:10px 16px;border:none;border-radius:10px;cursor:pointer;font-weight:600}
+  .btn.primary{background:var(--accent);color:white}
+  .btn.disabled{background:#555;opacity:.5;cursor:not-allowed}
+  input,select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:white;margin-top:6px;margin-bottom:14px}
   table{width:100%;border-collapse:collapse;margin-top:20px;font-size:14px}
   th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.05);text-align:left}
   th{color:var(--muted)}
   .muted{color:var(--muted)}
-  input{padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:white}
 </style>
 </head>
 <body>
 <div class="shell" id="loginCard">
-  <h1>Login Admin</h1>
-  <label>Email</label><br/>
-  <input id="adminEmail" type="email" placeholder="admin email"/><br/><br/>
-  <label>Password</label><br/>
-  <input id="adminPass" type="password" placeholder="password"/><br/><br/>
-  <button id="btnAdminLogin" class="btn update">Login</button>
-  <p class="muted" style="margin-top:10px">Hanya email & password admin yang valid.</p>
+  <h1>Login untuk Withdraw</h1>
+  <label>Email</label>
+  <input id="email" type="email"/>
+  <label>Password</label>
+  <input id="password" type="password"/>
+  <button id="btnLogin" class="btn primary">Login</button>
 </div>
 
-<div class="shell" id="adminPanel" style="display:none">
-  <h1>Admin Dashboard — NUSATASK</h1>
-  <div style="margin-bottom:16px">
-    <label>Limit Harian: </label>
-    <input id="dailyLimitIn" type="number" style="width:80px"/>
-    <button id="btnUpdateLimit" class="btn update">Update</button>
+<div class="shell" id="wdPanel" style="display:none">
+  <h1>Withdraw Dashboard</h1>
+  <div>
+    <p>Total Saldo Anda:</p>
+    <h2 id="totalSaldo" style="color:var(--accent-2)">Rp 0</h2>
   </div>
-  <table id="userTable">
-    <thead>
-      <tr>
-        <th>Email</th><th>Saldo</th><th>Status</th><th>ActionsToday</th><th>Device</th><th>IP</th><th>Aksi</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+
+  <div style="margin-top:20px">
+    <h3>Form Withdraw</h3>
+    <label>Pilih E-Wallet</label>
+    <select id="wallet">
+      <option value="Dana">Dana</option>
+      <option value="OVO">OVO</option>
+      <option value="Gopay">Gopay</option>
+      <option value="ShopeePay">ShopeePay</option>
+      <option value="LinkAja">LinkAja</option>
+    </select>
+    <label>Nomor E-Wallet</label>
+    <input id="walletNumber" type="text" placeholder="08xxxx"/>
+    <button id="btnKirim" class="btn primary disabled" disabled>Kirim Withdraw</button>
+    <p class="muted">Minimal withdraw Rp 30.000</p>
+  </div>
+
+  <div style="margin-top:30px">
+    <h3>Riwayat Withdraw</h3>
+    <table>
+      <thead><tr><th>Jumlah</th><th>Wallet</th><th>Nomor</th><th>Status</th></tr></thead>
+      <tbody id="riwayat"></tbody>
+    </table>
+  </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import { getDatabase, ref, get, update, set, onValue } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+import { getDatabase, ref, get, push, set, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-/* Config */
+/* Firebase Config */
 const firebaseConfig={apiKey:"AIzaSyAUcac_uXdofDbqPwltgb4m7qIPiQhJi0s",authDomain:"nusataskproject.firebaseapp.com",databaseURL:"https://nusataskproject-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"nusataskproject",storageBucket:"nusataskproject.firebasestorage.app",messagingSenderId:"409602188456",appId:"1:409602188456:web:6302d3030b763324e28e9d",measurementId:"G-9389QL1WRE"};
 const app=initializeApp(firebaseConfig);const auth=getAuth(app);const db=getDatabase(app);
 
-/* Elements */
+/* UI */
 const loginCard=document.getElementById('loginCard');
-const adminPanel=document.getElementById('adminPanel');
-const btnLogin=document.getElementById('btnAdminLogin');
-const emailIn=document.getElementById('adminEmail');
-const passIn=document.getElementById('adminPass');
-const userTable=document.querySelector('#userTable tbody');
-const dailyLimitIn=document.getElementById('dailyLimitIn');
-const btnUpdateLimit=document.getElementById('btnUpdateLimit');
+const wdPanel=document.getElementById('wdPanel');
+const btnLogin=document.getElementById('btnLogin');
+const emailIn=document.getElementById('email');
+const passIn=document.getElementById('password');
+const totalSaldoEl=document.getElementById('totalSaldo');
+const btnKirim=document.getElementById('btnKirim');
+const walletSel=document.getElementById('wallet');
+const walletNum=document.getElementById('walletNumber');
+const riwayatTbody=document.getElementById('riwayat');
 
 /* Login */
 btnLogin.onclick=()=>{signInWithEmailAndPassword(auth,emailIn.value,passIn.value).catch(e=>alert(e.message));};
 
-/* Auth state */
+/* On Auth */
 onAuthStateChanged(auth,async user=>{
   if(user){
-    if(user.email!=="admin111@gmail.com"){alert("Bukan admin!");return;}
-    loginCard.style.display='none';adminPanel.style.display='block';
-    loadUsers();
-    loadConfig();
+    loginCard.style.display='none';
+    wdPanel.style.display='block';
+    loadSaldo(user.uid);
+    loadRiwayat(user.uid);
+    btnKirim.onclick=()=>buatWD(user.uid);
   }
 });
 
-/* Load users */
-function loadUsers(){
-  onValue(ref(db,'users'),snap=>{
-    userTable.innerHTML='';
-    snap.forEach(c=>{
-      const u=c.val();const tr=document.createElement('tr');
-      tr.innerHTML=`
-        <td>${u.email||'-'}</td>
-        <td>Rp ${(u.balance||0).toLocaleString('id-ID')}</td>
-        <td>${u.status||'-'}</td>
-        <td>${u.actionsToday||0}</td>
-        <td>${u.deviceId||'-'}</td>
-        <td>${u.lastIp||'-'}</td>
-        <td>
-          <button class="btn ban" onclick="banUser('${c.key}')">Ban</button>
-          <button class="btn unban" onclick="unbanUser('${c.key}')">Unban</button>
-        </td>`;
-      userTable.appendChild(tr);
-    });
-  });
+/* Hitung total saldo dari bot1...bot10 */
+async function loadSaldo(uid){
+  let total=0;
+  for(let i=1;i<=10;i++){
+    const snap=await get(ref(db,`bot${i}/users/${uid}/balance`));
+    if(snap.exists()) total+=snap.val()||0;
+  }
+  totalSaldoEl.textContent="Rp "+total.toLocaleString('id-ID');
+  if(total>=30000){
+    btnKirim.disabled=false;
+    btnKirim.classList.remove('disabled');
+  }else{
+    btnKirim.disabled=true;
+    btnKirim.classList.add('disabled');
+  }
 }
 
-/* Config */
-function loadConfig(){
-  onValue(ref(db,'config/dailyLimit'),snap=>{
-    if(snap.exists())dailyLimitIn.value=snap.val();
+/* Buat request WD */
+async function buatWD(uid){
+  const wallet=walletSel.value;
+  const number=walletNum.value.trim();
+  if(!number){alert("Isi nomor e-wallet");return;}
+  const amount=parseInt(totalSaldoEl.textContent.replace(/\D/g,''))||0;
+  if(amount<30000){alert("Saldo belum cukup untuk WD");return;}
+  const reqRef=push(ref(db,`withdraw/${uid}`));
+  await set(reqRef,{amount,wallet,number,status:"pending",createdAt:serverTimestamp()});
+  alert("Request WD berhasil dikirim");
+}
+
+/* Riwayat WD */
+function loadRiwayat(uid){
+  onValue(ref(db,`withdraw/${uid}`),snap=>{
+    riwayatTbody.innerHTML="";
+    if(snap.exists()){
+      const data=snap.val();
+      Object.values(data).reverse().forEach(r=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>Rp ${r.amount.toLocaleString('id-ID')}</td><td>${r.wallet}</td><td>${r.number}</td><td>${r.status}</td>`;
+        riwayatTbody.appendChild(tr);
+      });
+    }
   });
 }
-btnUpdateLimit.onclick=()=>{const v=Number(dailyLimitIn.value)||30;set(ref(db,'config/dailyLimit'),v);alert("Limit harian diupdate!");};
-
-/* Ban/Unban */
-window.banUser=(uid)=>{update(ref(db,'users/'+uid),{status:'banned'});};
-window.unbanUser=(uid)=>{update(ref(db,'users/'+uid),{status:'active'});};
 </script>
 </body>
 </html>
